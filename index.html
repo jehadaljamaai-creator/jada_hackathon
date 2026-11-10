@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>منصة تحكيم جادة ثون</title>
+<meta name="description" content="تقييم مشاريع الهاكاثون، والنتائج المباشرة، وإعلان الفائزين.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230E6A53'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='white' font-family='Tahoma'%3E%D8%AC%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Reem+Kufi:wght@500;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="#judge"><span class="mark" aria-hidden="true">ج</span><span class="brand-name">منصة تحكيم جادة ثون</span></a>
+      <div class="event-chip" id="eventChip"><span>جارٍ التحميل…</span></div>
+      <nav class="tabs" aria-label="أقسام المنصة">
+        <a class="tab" href="#judge" data-route="judge">التقييم</a>
+        <a class="tab" href="#live" data-route="live">النتائج المباشرة</a>
+        <a class="tab" href="#winners" data-route="winners">الفائزون</a>
+        <a class="tab" href="#admin" data-route="admin" id="adminTab" hidden>الإدارة</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap" id="main"></main>
+  <div class="toast" id="toast" role="status" hidden></div>
+</div>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
