@@ -332,21 +332,21 @@
       };
       let ptr = null;
       const setX = (x) => { const nv = String(fromX(x)); if (range.value !== nv || !wrap.classList.contains('set')) { range.value = nv; apply(); } };
-      const end = () => { ptr = null; S.dragging = false; flushDeferred(); };
+      const onMove = (ev) => {
+        if (!ptr || ev.pointerId !== ptr.id) return;
+        if (!ptr.h && Math.abs(ev.clientX - ptr.x) > 4 && Math.abs(ev.clientX - ptr.x) >= Math.abs(ev.clientY - ptr.y)) ptr.h = true;
+        if (ptr.h) setX(ev.clientX);
+      };
+      const onUp = (ev) => {
+        if (!ptr || ev.pointerId !== ptr.id) return;
+        setX(ev.clientX); end();
+      };
+      const unbind = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+      const end = () => { ptr = null; unbind(); S.dragging = false; flushDeferred(); };
       range.addEventListener('pointerdown', (ev) => {
         if (!editable || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
         ptr = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, h: false, prev: { r: range.value, v: d.v[c.key], set: wrap.classList.contains('set'), dirty: d.dirty } }; S.dragging = true;
-      });
-      range.addEventListener('pointermove', (ev) => {
-        if (!ptr || ev.pointerId !== ptr.id) return;
-        if (!ptr.h && Math.abs(ev.clientX - ptr.x) > 4 && Math.abs(ev.clientX - ptr.x) >= Math.abs(ev.clientY - ptr.y)) {
-          ptr.h = true; try { range.setPointerCapture(ev.pointerId); } catch {}
-        }
-        if (ptr.h) { ev.preventDefault(); setX(ev.clientX); }
-      });
-      range.addEventListener('pointerup', (ev) => {
-        if (ptr && ev.pointerId === ptr.id) setX(ev.clientX);
-        end();
+        window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
       });
       // A vertical swipe that started on the slider is a page scroll: put the previous value back.
       range.addEventListener('pointercancel', (ev) => {
@@ -362,7 +362,6 @@
         }
         end();
       });
-      range.addEventListener('lostpointercapture', () => { if (ptr && ptr.h) end(); });
       const ticks = el('div', { class: 'ticks', style: '--n:' + scale });
       for (let i = 1; i <= scale; i++) ticks.append(el('button', { type: 'button', class: 'tick tnum', tabindex: '-1', disabled: !editable, 'aria-hidden': 'true', onclick: () => { range.value = String(i); apply(); } }, String(i)));
       wrap.append(el('div', { class: 'track-row' }, range, bubble), ticks);
@@ -975,7 +974,7 @@
   window.addEventListener('hashchange', route);
   document.addEventListener('focusout', () => setTimeout(flushDeferred, 0));
   window.addEventListener('beforeunload', (ev) => {
-    if (S.adminDirty || Object.values(S.drafts).some((x) => x.dirty)) { ev.preventDefault(); ev.returnValue = ''; }
+    if (S.adminDirty || (S.js && S.js.event && S.js.event.status === 'open' && Object.values(S.drafts).some((x) => x.dirty))) { ev.preventDefault(); ev.returnValue = ''; }
   });
 
   async function boot() {
