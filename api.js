@@ -23,7 +23,9 @@
 
     // للمنظّمين
     getUser: async () => { const { data } = await sb.auth.getSession(); return data.session ? data.session.user : null; },
-    onAuth: (fn) => sb.auth.onAuthStateChange((_e, session) => fn(session ? session.user : null)),
+    onAuth: (fn) => sb.auth.onAuthStateChange((event, session) => fn(session ? session.user : null, event)),
+    resetPassword: async (email, redirectTo) => ok(await sb.auth.resetPasswordForEmail(email, { redirectTo })),
+    updatePassword: async (password) => ok(await sb.auth.updateUser({ password })),
     signIn: async (email, password) => ok(await sb.auth.signInWithPassword({ email, password })),
     signOut: async () => { await sb.auth.signOut(); },
     isAdmin: async () => !!ok(await sb.rpc('is_admin')),

@@ -14,7 +14,9 @@
   const LEVELS5 = ['ضعيف', 'مقبول', 'جيد', 'جيد جداً', 'ممتاز'];
   const levelOf = (v, scale) => v == null ? 'لم يُحدَّد بعد' : LEVELS5[Math.min(4, Math.max(0, Math.ceil(v / scale * 5) - 1))];
 
+  const INITIAL_HASH = location.hash || '';
   const S = {
+    recovery: /type=recovery/.test(INITIAL_HASH), recoveryErr: /error_code=|error=access_denied/.test(INITIAL_HASH),
     route: 'judge', code: null,
     pub: null, pubErr: false,          // public_state
     js: null, jsErr: null,             // judge_session
@@ -488,11 +490,28 @@
       el('p', { class: 'lead', text: 'هذه الصفحة لإدارة الهاكاثونات. يستخدم المحكّمون روابطهم الخاصة ولا يحتاجون إلى تسجيل الدخول.' }))));
     const email = el('input', { type: 'email', id: 'loginEmail', autocomplete: 'username', placeholder: 'name@example.com', dir: 'ltr' });
     const pass = el('input', { type: 'password', id: 'loginPass', autocomplete: 'current-password', dir: 'ltr' });
-    const err = el('p', { class: 'err', hidden: true });
+    const err = el('p', { class: 'err', hidden: S.recoveryErr ? null : true, text: S.recoveryErr ? 'انتهت صلاحية رابط استعادة كلمة المرور أو استُخدم من قبل. اطلب رابطاً جديداً.' : '' });
+    const info = el('p', { class: 'small', style: 'margin:0;color:var(--ok)', hidden: true });
     const btn = el('button', { class: 'btn primary', type: 'submit' }, 'دخول');
+    const forgot = el('button', { class: 'btn ghost small', type: 'button', id: 'forgotBtn', onclick: async () => {
+      err.hidden = true; info.hidden = true;
+      const em = email.value.trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { err.textContent = 'اكتب بريدك الإلكتروني أولاً ثم اضغط «نسيت كلمة المرور».'; err.hidden = false; email.focus(); return; }
+      forgot.disabled = true;
+      try {
+        await API.resetPassword(em, siteBase());
+        info.textContent = 'أرسلنا رابط تعيين كلمة مرور جديدة إلى ' + em + ' (إن كان مسجلاً). افتح الرابط من هذا الجهاز خلال ساعة، وتحقق من مجلد الرسائل غير المرغوبة.';
+        info.hidden = false;
+      } catch (e2) {
+        err.textContent = /rate|seconds|limit/i.test(errCode(e2)) ? 'طلبت رابطاً قبل قليل؛ انتظر دقيقة ثم حاول مرة أخرى.' : 'تعذّر إرسال الرابط: ' + errCode(e2);
+        err.hidden = false;
+      }
+      forgot.disabled = false;
+    } }, 'نسيت كلمة المرور؟');
     const form = el('form', { class: 'card login' },
       el('label', { class: 'f' }, 'البريد الإلكتروني', email),
-      el('label', { class: 'f' }, 'كلمة المرور', pass), err, btn);
+      el('label', { class: 'f' }, 'كلمة المرور', pass), err, info,
+      el('div', { class: 'row', style: 'justify-content:space-between' }, btn, forgot));
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault(); err.hidden = true; btn.disabled = true;
       try {
@@ -502,6 +521,32 @@
         render();
       } catch { err.textContent = 'البريد أو كلمة المرور غير صحيحة.'; err.hidden = false; }
       btn.disabled = false;
+    });
+    page.append(form);
+  }
+  function renderNewPassword(page) {
+    page.append(el('div', { class: 'page-head' }, el('div', {}, el('h1', { text: 'تعيين كلمة مرور جديدة' }),
+      el('p', { class: 'lead', text: 'اختر كلمة مرور جديدة لحسابك' + (S.user && S.user.email ? ' (' + S.user.email + ')' : '') + '.' }))));
+    const p1 = el('input', { type: 'password', id: 'newPass1', autocomplete: 'new-password', dir: 'ltr', minlength: '8' });
+    const p2 = el('input', { type: 'password', id: 'newPass2', autocomplete: 'new-password', dir: 'ltr', minlength: '8' });
+    const err = el('p', { class: 'err', hidden: true });
+    const btn = el('button', { class: 'btn primary', type: 'submit' }, 'حفظ كلمة المرور');
+    const form = el('form', { class: 'card login' },
+      el('label', { class: 'f' }, 'كلمة المرور الجديدة (8 أحرف على الأقل)', p1),
+      el('label', { class: 'f' }, 'أعد كتابتها للتأكيد', p2), err, btn);
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault(); err.hidden = true;
+      if (p1.value.length < 8) { err.textContent = 'كلمة المرور قصيرة؛ استخدم 8 أحرف على الأقل.'; err.hidden = false; return; }
+      if (p1.value !== p2.value) { err.textContent = 'كلمتا المرور غير متطابقتين.'; err.hidden = false; return; }
+      btn.disabled = true;
+      try {
+        await API.updatePassword(p1.value);
+        S.recovery = false;
+        await refreshAuth();
+        if (S.isAdmin) await loadAdmin(true);
+        toast('تم تغيير كلمة المرور');
+        render();
+      } catch (e2) { err.textContent = 'تعذّر الحفظ: ' + errCode(e2); err.hidden = false; btn.disabled = false; }
     });
     page.append(form);
   }
@@ -517,6 +562,11 @@
   function renderAdmin(root) {
     const page = el('section', { class: 'page', id: 'admin' });
     root.append(page);
+    if (S.recovery) {
+      if (S.user) return renderNewPassword(page);
+      page.append(el('div', { class: 'card empty' }, el('h2', { text: 'جارٍ التحقق من رابط الاستعادة…' })));
+      return;
+    }
     if (!S.user) return renderLogin(page);
     if (!S.isAdmin) {
       page.append(el('div', { class: 'card empty' }, el('h2', { text: 'حسابك ليس ضمن المنظّمين' }),
@@ -775,7 +825,7 @@
     const jm = /^j-([0-9a-f]{32})$/i.exec(h);
     const prevCode = S.code;
     S.code = jm ? jm[1].toLowerCase() : null;
-    S.route = jm ? 'judge' : (['judge', 'live', 'winners', 'admin'].includes(h) ? h : 'judge');
+    S.route = jm ? 'judge' : /access_token=|error_code=|type=recovery/.test(h) ? 'admin' : (['judge', 'live', 'winners', 'admin'].includes(h) ? h : 'judge');
     if (S.code !== prevCode) { S.js = null; S.jsErr = null; S.selTeam = null; }
     S.lastReveal = null;
     render();
@@ -792,7 +842,12 @@
     await route();
     if (!API.configured) return;
     await refreshAuth();
-    if (API.onAuth) API.onAuth(async (u) => {
+    if (API.onAuth) API.onAuth(async (u, event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        S.recovery = true; S.route = 'admin';
+        try { history.replaceState(null, '', location.pathname + '#admin'); } catch {}
+        await refreshAuth(); render(); return;
+      }
       const changed = (u && u.id) !== (S.user && S.user.id);
       if (!changed) return;
       await refreshAuth(); if (S.isAdmin) await loadAdmin(true); render();
