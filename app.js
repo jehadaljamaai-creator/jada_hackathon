@@ -221,7 +221,7 @@
       el('div', { class: 'jh-text' },
         el('span', { class: 'muted small', text: 'صفحة المحكّم · ' + e.name }),
         el('h1', { text: 'أهلاً ' + me.name }),
-        el('p', { class: 'lead', text: total && done === total ? 'أكملت تقييم جميع المشاريع، شكراً لك. يمكنك مراجعة تقييماتك وتعديلها ما دام التقييم مفتوحاً.' : 'حرّك الشريط لكل معيار، ثم احفظ وانتقل إلى المشروع التالي.' })),
+        el('p', { class: 'lead', text: total && done === total ? 'أكملت تقييم جميع المشاريع، شكراً لك. يمكنك مراجعة تقييماتك وتعديلها ما دام التقييم مفتوحاً.' : 'حرّك الشريط أو اضغط على الرقم لكل معيار، ثم احفظ وانتقل إلى المشروع التالي.' })),
       progressRing(done, total)));
 
     if (!open) page.append(el('div', { class: 'notice' }, el('p', { text: e.status === 'closed' ? 'أُغلق باب التقييم. يمكنك مراجعة تقييماتك فقط.' : 'لم يُفتح باب التقييم بعد. ستتمكن من التقييم فور فتحه، والصفحة تتحدّث تلقائياً.' })));
@@ -298,7 +298,7 @@
       const noW = !(d.worthy === true || d.worthy === false);
       saveBtn.disabled = !editable || !isReady() || (saved && !d.dirty);
       saveBtn.textContent = saved ? (d.dirty ? 'حفظ التعديل' : 'محفوظ ✓') : 'حفظ التقييم';
-      hint.textContent = !editable || isReady() ? '' : 'أكمل ' + [missing ? missing + ' من المعايير' : '', noW ? 'سؤال الجدارة' : ''].filter(Boolean).join(' و') + ' لتفعيل الحفظ.';
+      hint.textContent = !editable ? (e.status === 'closed' ? '🔒 أُغلق باب التقييم؛ التقييمات للعرض فقط.' : '🔒 الشريط مقفل لأن التقييم لم يُفتح بعد. سيعمل تلقائياً فور فتح المنظّم للتقييم.') : isReady() ? '' : 'أكمل ' + [missing ? missing + ' من المعايير' : '', noW ? 'سؤال الجدارة' : ''].filter(Boolean).join(' و') + ' لتفعيل الحفظ.';
       hint.hidden = !hint.textContent;
     };
     const markDraft = () => {
@@ -311,8 +311,8 @@
       const has = Number.isFinite(Number(v));
       const range = el('input', { type: 'range', id: 'rng-' + c.key, min: '1', max: String(scale), step: '1', value: String(has ? v : Math.ceil(scale / 2)), disabled: !editable, 'aria-label': c.label });
       const bubble = el('output', { class: 'bubble tnum', for: 'rng-' + c.key, text: has ? String(v) : '—' });
-      const level = el('span', { class: 'level', text: levelOf(has ? Number(v) : null, scale) });
-      const wrap = el('div', { class: 'slider' + (has ? ' set' : '') });
+      const level = el('span', { class: 'level', text: !editable && !has ? 'مقفل' : levelOf(has ? Number(v) : null, scale) });
+      const wrap = el('div', { class: 'slider' + (has ? ' set' : '') + (editable ? '' : ' locked') });
       const paint = () => wrap.style.setProperty('--p', (scale > 1 ? (Number(range.value) - 1) / (scale - 1) * 100 : 100) + '%');
       const apply = () => {
         const cur = Number(range.value);
@@ -322,11 +322,47 @@
         paint(); refresh();
       };
       range.addEventListener('input', apply);
-      range.addEventListener('pointerdown', () => { S.dragging = true; });
-      const end = () => { S.dragging = false; flushDeferred(); };
-      range.addEventListener('change', () => { apply(); end(); });
-      range.addEventListener('pointerup', () => { if (!wrap.classList.contains('set')) apply(); end(); });
-      range.addEventListener('pointercancel', end);
+      let undo = null;
+      range.addEventListener('change', () => { if (!undo) apply(); });
+      // Touch & mouse: tap anywhere on the track to jump, or slide horizontally (works the same on iPhone, Android and desktop; RTL: 1 on the right).
+      const fromX = (x) => {
+        const b = range.getBoundingClientRect(), pad = 15, span = Math.max(1, b.width - pad * 2);
+        const f = Math.min(1, Math.max(0, (b.right - pad - x) / span));
+        return Math.round(f * (scale - 1)) + 1;
+      };
+      let ptr = null;
+      const setX = (x) => { const nv = String(fromX(x)); if (range.value !== nv || !wrap.classList.contains('set')) { range.value = nv; apply(); } };
+      const end = () => { ptr = null; S.dragging = false; flushDeferred(); };
+      range.addEventListener('pointerdown', (ev) => {
+        if (!editable || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
+        ptr = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, h: false, prev: { r: range.value, v: d.v[c.key], set: wrap.classList.contains('set'), dirty: d.dirty } }; S.dragging = true;
+      });
+      range.addEventListener('pointermove', (ev) => {
+        if (!ptr || ev.pointerId !== ptr.id) return;
+        if (!ptr.h && Math.abs(ev.clientX - ptr.x) > 4 && Math.abs(ev.clientX - ptr.x) >= Math.abs(ev.clientY - ptr.y)) {
+          ptr.h = true; try { range.setPointerCapture(ev.pointerId); } catch {}
+        }
+        if (ptr.h) { ev.preventDefault(); setX(ev.clientX); }
+      });
+      range.addEventListener('pointerup', (ev) => {
+        if (ptr && ev.pointerId === ptr.id) setX(ev.clientX);
+        end();
+      });
+      // A vertical swipe that started on the slider is a page scroll: put the previous value back.
+      range.addEventListener('pointercancel', (ev) => {
+        if (ptr && ev.pointerId === ptr.id && !ptr.h) {
+          const pv = ptr.prev;
+          undo = () => {
+            range.value = pv.r; d.dirty = pv.dirty;
+            if (pv.v == null) delete d.v[c.key]; else d.v[c.key] = pv.v;
+            wrap.classList.toggle('set', pv.set); bubble.textContent = pv.set ? String(pv.v) : '—';
+            level.textContent = levelOf(pv.set ? Number(pv.v) : null, scale); paint(); refresh();
+          };
+          setTimeout(() => { if (undo) { undo(); undo = null; } }, 0);
+        }
+        end();
+      });
+      range.addEventListener('lostpointercapture', () => { if (ptr && ptr.h) end(); });
       const ticks = el('div', { class: 'ticks', style: '--n:' + scale });
       for (let i = 1; i <= scale; i++) ticks.append(el('button', { type: 'button', class: 'tick tnum', tabindex: '-1', disabled: !editable, 'aria-hidden': 'true', onclick: () => { range.value = String(i); apply(); } }, String(i)));
       wrap.append(el('div', { class: 'track-row' }, range, bubble), ticks);
