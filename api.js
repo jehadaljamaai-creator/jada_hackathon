@@ -42,6 +42,10 @@
       const fresh = judges.filter((j) => !j.id).map((j) => ({ event_id: eventId, name: j.name, position: j.position }));
       if (fresh.length) ok(await sb.from('judges').insert(fresh));
     },
+    uploadLogo: async (path, blob) => {
+      ok(await sb.storage.from('logos').upload(path, blob, { contentType: blob.type, upsert: true, cacheControl: '31536000' }));
+      return sb.storage.from('logos').getPublicUrl(path).data.publicUrl;
+    },
     rawScores: async (eventId) => ok(await sb.from('scores').select('judge_name,team_id,vals,worthy,note,updated_at').eq('event_id', eventId).order('judge_name'))
   };
 })();

@@ -45,6 +45,33 @@
     try { return new Intl.DateTimeFormat('ar-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(iso + 'T00:00:00Z')); }
     catch { return iso; }
   };
+  // Team identity: number + logo (falls back to the number on a tinted tile)
+  const teamNo = (t, i) => (t && t.number != null && t.number !== '' ? t.number : i + 1);
+  function teamLogo(t, cls) {
+    const box = el('span', { class: 'tlogo ' + (cls || ''), 'aria-hidden': 'true' });
+    if (t && t.logo && /^https:\/\//.test(t.logo)) {
+      const img = el('img', { src: t.logo, alt: '', loading: 'lazy', decoding: 'async' });
+      img.addEventListener('error', () => { img.remove(); box.classList.add('ph'); box.textContent = (t.name || '؟').trim().charAt(0); });
+      box.append(img);
+    } else { box.classList.add('ph'); box.textContent = ((t && t.name) || '؟').trim().charAt(0); }
+    return box;
+  }
+  const teamsById = (e) => new Map((e && e.teams ? e.teams : []).map((t, i) => [t.id, { ...t, no: teamNo(t, i) }]));
+  async function shrinkImage(file) {
+    if (!/^image\/(png|jpe?g|webp|gif|svg\+xml)$/i.test(file.type)) throw new Error('type');
+    if (file.size > 8 * 1024 * 1024) throw new Error('size');
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = url; });
+      const max = 320, w0 = img.naturalWidth || max, h0 = img.naturalHeight || max;
+      const k = Math.min(1, max / Math.max(w0, h0));
+      const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w0 * k)); c.height = Math.max(1, Math.round(h0 * k));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      let blob = await new Promise((res) => c.toBlob(res, 'image/webp', 0.88));
+      if (!blob || blob.type !== 'image/webp') blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+      return blob;
+    } finally { URL.revokeObjectURL(url); }
+  }
   let toastT;
   const toast = (msg) => { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 2800); };
   const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -214,9 +241,11 @@
         type: 'button', class: 'team-btn' + (fin ? ' done' : ''), role: 'listitem', 'aria-pressed': String(S.selTeam === t.id),
         onclick: () => { S.selTeam = t.id; render(); scrollToForm(); }
       },
-        el('span', { class: 'num tnum', text: 'فريق ' + (i + 1) }),
-        el('span', { class: 'nm', text: t.name }),
-        el('span', { class: 'st' + (fin ? ' done' : ''), text: state })));
+        teamLogo(t),
+        el('span', { class: 'tb-text' },
+          el('span', { class: 'num tnum', text: 'فريق ' + teamNo(t, i) }),
+          el('span', { class: 'nm', text: t.name }),
+          el('span', { class: 'st' + (fin ? ' done' : ''), text: state }))));
     });
     layout.append(el('div', { class: 'team-col' }, el('h2', { class: 'col-title', text: 'المشاريع' }), list));
     layout.append(scoreForm(e, myScores, open));
@@ -253,7 +282,7 @@
     const nextT = e.teams[(idx + 1) % e.teams.length];
 
     box.append(el('div', { class: 'sf-head' },
-      el('div', { style: 'min-width:0' }, el('span', { class: 'muted small tnum', text: 'المشروع ' + (idx + 1) + ' من ' + e.teams.length }), el('h2', { text: team.name })),
+      el('div', { class: 'sf-team' }, teamLogo(team, 'lg'), el('div', { style: 'min-width:0' }, el('span', { class: 'muted small tnum', text: 'فريق ' + teamNo(team, idx) + ' · المشروع ' + (idx + 1) + ' من ' + e.teams.length }), el('h2', { text: team.name }))),
       el('div', { class: 'row', style: 'gap:6px;flex-wrap:nowrap' },
         el('button', { class: 'btn ghost', type: 'button', 'aria-label': 'المشروع السابق', onclick: () => { S.selTeam = prevT.id; render(); } }, '→'),
         el('button', { class: 'btn ghost', type: 'button', 'aria-label': 'المشروع التالي', onclick: () => { S.selTeam = nextT.id; render(); } }, '←'))));
@@ -384,13 +413,15 @@
     }
     const notes = tieNotes(R.rows);
     const board = el('div', { class: 'board', id: 'board' });
+    const tmap = teamsById(e);
     for (const r of R.rows) {
+      const tm = tmap.get(r.id) || { name: r.name };
       const crit = el('div', { class: 'crit-mini' });
       for (const c of e.criteria) crit.append(el('span', {}, c.label + ' ', el('b', { text: fmt(r.per && r.per[c.key], 1) })));
       board.append(el('div', { class: 'brow' + (r.rank <= 3 ? ' m' + r.rank : ''), 'data-id': r.id },
         el('div', { class: 'rank', text: String(r.rank) }),
-        el('div', { class: 'bname' }, el('b', { text: r.name }),
-          el('span', { text: 'جدير بالفوز: ' + r.yes + ' من ' + r.n + ' · ' + r.n + ' ' + (r.n === 1 ? 'تقييم' : 'تقييمات') + (notes[r.id] ? ' · ' + notes[r.id] : '') })),
+        el('div', { class: 'bname' }, teamLogo(tm), el('div', { class: 'bn-text' }, el('b', { text: r.name }),
+          el('span', { text: (tm.no != null ? 'فريق ' + tm.no + ' · ' : '') + 'جدير بالفوز: ' + r.yes + ' من ' + r.n + ' · ' + r.n + ' ' + (r.n === 1 ? 'تقييم' : 'تقييمات') + (notes[r.id] ? ' · ' + notes[r.id] : '') }))),
         el('div', { class: 'bscore' }, el('div', { class: 'bar' }, el('i', { style: 'width:' + r.score + '%' })), crit),
         el('div', { class: 'bnum', text: fmt(r.score) })));
     }
@@ -440,7 +471,8 @@
       const w = R && R.winners.find((x) => x.place === p);
       const shown = reveal >= 4 - p && w && !w.hidden;
       const who = el('div', { class: 'who' });
-      if (shown) who.append(el('b', { text: w.name }), el('span', { text: fmt(w.score) + ' من 100 · جدير بالفوز ' + w.yes + '/' + w.n }));
+      const wt = shown ? (teamsById(e).get(w.id) || { name: w.name }) : null;
+      if (shown) who.append(teamLogo(wt, 'xl'), el('b', { text: w.name }), el('span', { text: (wt.no != null ? 'فريق ' + wt.no + ' · ' : '') + fmt(w.score) + ' من 100 · جدير بالفوز ' + w.yes + '/' + w.n }));
       else who.append(el('span', { class: 'q', text: '؟' }));
       pod.append(el('div', { class: 'slot ' + (shown ? 'revealed' : 'hidden-slot'), 'data-p': String(p) }, who, el('div', { class: 'plinth', 'aria-label': PLACE[p] }, String(p))));
     }
@@ -629,23 +661,48 @@
       d.id ? el('p', { class: 'small muted', style: 'margin:10px 0 0', text: 'تغيير المعايير بعد بدء التقييم يجعل التقييمات السابقة غير مكتملة حتى يعيدها المحكّمون.' }) : null));
     updSum();
 
-    // Teams
+    // Teams: number, logo and name
     const tl = el('div', { class: 'list-edit' });
+    const nextNo = () => d.teams.reduce((m, t, i) => Math.max(m, Number(teamNo(t, i)) || 0), 0) + 1;
     d.teams.forEach((t, i) => {
-      const inp = el('input', { type: 'text', id: 'team-' + t.id, 'aria-label': 'اسم المشروع ' + (i + 1) }); inp.value = t.name;
+      if (t.number == null) t.number = i + 1;
+      const num = el('input', { type: 'number', id: 'teamno-' + t.id, min: '0', class: 'tnum', 'aria-label': 'رقم الفريق' }); num.value = t.number;
+      num.addEventListener('input', () => { t.number = num.value === '' ? '' : Number(num.value); mark(); });
+      const inp = el('input', { type: 'text', id: 'team-' + t.id, 'aria-label': 'اسم المشروع ' + (i + 1), placeholder: 'اسم المشروع' }); inp.value = t.name;
       inp.addEventListener('input', () => { t.name = inp.value; mark(); });
-      tl.append(el('div', { class: 'le-row' }, el('span', { class: 'idx', text: String(i + 1) }), inp,
+      const file = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/svg+xml', hidden: true, id: 'logo-' + t.id });
+      const logoBtn = el('button', { class: 'logo-btn', type: 'button', title: t.logo ? 'تغيير الشعار' : 'إضافة شعار', 'aria-label': t.logo ? 'تغيير شعار ' + t.name : 'إضافة شعار ' + t.name, onclick: () => file.click() }, teamLogo(t), el('span', { class: 'logo-plus', text: t.logo ? '✎' : '+' }));
+      file.addEventListener('change', async () => {
+        const f = file.files && file.files[0]; if (!f) return;
+        logoBtn.disabled = true; logoBtn.classList.add('busy');
+        try {
+          const blob = await shrinkImage(f);
+          const ext = blob.type === 'image/webp' ? 'webp' : 'png';
+          t.logo = await API.uploadLogo((d.id || 'new') + '/' + t.id + '-' + Date.now() + '.' + ext, blob);
+          mark(); render(); toast('أُضيف الشعار، اضغط حفظ لاعتماده');
+        } catch (err) {
+          const m = errCode(err);
+          toast(m === 'type' ? 'اختر صورة PNG أو JPG أو WebP أو SVG' : m === 'size' ? 'الصورة كبيرة جداً (الحد 8 ميجابايت)' : /bucket|not found/i.test(m) ? 'مجلد الشعارات غير مُعدّ في قاعدة البيانات بعد' : 'تعذّر رفع الشعار: ' + m);
+          logoBtn.disabled = false; logoBtn.classList.remove('busy');
+        }
+      });
+      tl.append(el('div', { class: 'le-row team' }, num, logoBtn, file, inp,
+        t.logo ? el('button', { class: 'icon-btn', type: 'button', title: 'إزالة الشعار', 'aria-label': 'إزالة الشعار', onclick: () => { t.logo = null; mark(); render(); } }, '⌫') : el('span'),
         el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'حذف المشروع', onclick: () => { d.teams.splice(i, 1); mark(); render(); } }, '✕')));
     });
     const bulk = el('textarea', { id: 'teamsBulk', rows: '3', placeholder: 'أضف عدة مشاريع دفعة واحدة: اسم في كل سطر' });
     right.append(el('div', { class: 'card' },
       el('div', { class: 'sec-title' }, el('h2', { text: 'المشاريع المشاركة' }), el('span', { class: 'small muted tnum', text: d.teams.length + ' مشروعاً' })),
-      tl, el('div', { style: 'display:flex;flex-direction:column;gap:8px;margin-top:12px' }, bulk,
+      d.teams.length ? el('div', { class: 'le-head team small muted' }, el('span', { text: 'رقم الفريق' }), el('span', { text: 'الشعار' }), el('span', { text: 'اسم المشروع' })) : null,
+      tl,
+      el('div', { style: 'display:flex;flex-direction:column;gap:8px;margin-top:12px' }, bulk,
         el('div', { class: 'row' }, el('button', { class: 'btn', type: 'button', onclick: () => {
-          const names = bulk.value.split('\n').map((s) => s.trim()).filter(Boolean);
-          names.forEach((n, k) => d.teams.push({ id: 't' + Date.now().toString(36) + k, name: n }));
+          const names = bulk.value.split('\n').map((x) => x.trim()).filter(Boolean);
+          let n = nextNo();
+          names.forEach((nm, k) => d.teams.push({ id: 't' + Date.now().toString(36) + k, name: nm, number: n++, logo: null }));
           if (names.length) { mark(); render(); }
-        } }, 'إضافة المشاريع'), el('span', { class: 'small muted', text: 'تعديل اسم مشروع لا يمس درجاته؛ حذفه يخفي درجاته من النتائج.' })))));
+        } }, 'إضافة المشاريع')),
+        el('p', { class: 'small muted', style: 'margin:0', text: 'اضغط على مربع الشعار لرفع صورة (تُصغَّر تلقائياً). الرقم يظهر للمحكّمين وفي النتائج. تعديل اسم مشروع أو رقمه لا يمس درجاته؛ حذفه يخفي درجاته من النتائج.' }))));
 
     // Judges
     const progress = new Map(((e && a.results[e.id] && a.results[e.id].judges) || []).map((j) => [j.name, j.count]));
@@ -744,7 +801,7 @@
       name: d.name.trim(), city: (d.city || '').trim(), event_date: d.event_date || null, scale: Number(d.scale) || 5,
       status: d.status, live_visible: d.live_visible !== false,
       criteria: d.criteria.map((c) => ({ key: c.key, label: c.label.trim(), desc: (c.desc || '').trim(), weight: Number(c.weight) || 0 })),
-      teams: d.teams.filter((t) => t.name.trim()).map((t) => ({ id: t.id, name: t.name.trim() }))
+      teams: d.teams.filter((t) => t.name.trim()).map((t, i) => ({ id: t.id, name: t.name.trim(), number: (t.number === '' || t.number == null) ? i + 1 : Number(t.number), logo: t.logo || null }))
     };
     try {
       let id = d.id;
@@ -775,8 +832,9 @@
       if (kind === 'ranking') {
         const R = S.admin.results[e.id] || await API.eventResults(e.id);
         const notes = tieNotes(R.rows || []);
-        rows = [['المركز', 'المشروع', 'الدرجة من 100', ...e.criteria.map((c) => c.label + ' (متوسط)'), 'جدير بالفوز', 'عدد التقييمات', 'ملاحظة']];
-        for (const r of R.rows || []) rows.push([r.rank, r.name, r.score, ...e.criteria.map((c) => fmt(r.per && r.per[c.key], 2)), r.yes, r.n, notes[r.id] || '']);
+        const tmx = teamsById(e);
+        rows = [['المركز', 'رقم الفريق', 'المشروع', 'الدرجة من 100', ...e.criteria.map((c) => c.label + ' (متوسط)'), 'جدير بالفوز', 'عدد التقييمات', 'ملاحظة']];
+        for (const r of R.rows || []) rows.push([r.rank, (tmx.get(r.id) || {}).no ?? '', r.name, r.score, ...e.criteria.map((c) => fmt(r.per && r.per[c.key], 2)), r.yes, r.n, notes[r.id] || '']);
       } else {
         const raw = await API.rawScores(e.id);
         const tname = new Map(e.teams.map((t) => [t.id, t.name]));

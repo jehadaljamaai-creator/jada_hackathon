@@ -186,7 +186,7 @@ begin
       'winners', coalesce((
                  select jsonb_agg(
                    case when admin_view or e.reveal >= 4 - w.place
-                     then jsonb_build_object('place', w.place, 'name', w.name, 'score', w.score, 'yes', w.yes, 'n', w.n)
+                     then jsonb_build_object('place', w.place, 'id', w.id, 'name', w.name, 'score', w.score, 'yes', w.yes, 'n', w.n)
                      else jsonb_build_object('place', w.place, 'hidden', true) end
                    order by w.place)
                  from placed w where w.place <= 3), '[]'::jsonb),
@@ -288,3 +288,19 @@ grant execute on function public.public_state() to anon, authenticated;
 grant execute on function public.judge_session(text) to anon, authenticated;
 grant execute on function public.submit_score(text, text, jsonb, boolean, text) to anon, authenticated;
 grant execute on function public.is_admin() to anon, authenticated;
+
+-- ---------- شعارات المشاريع (Supabase Storage) ----------
+-- مجلد عام للقراءة؛ الرفع والتعديل والحذف للمنظّمين فقط.
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('logos', 'logos', true, 1048576, array['image/png', 'image/jpeg', 'image/webp'])
+on conflict (id) do update set public = true, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists logos_admin_select on storage.objects;
+create policy logos_admin_select on storage.objects for select to authenticated using (bucket_id = 'logos' and public.is_admin());
+drop policy if exists logos_admin_insert on storage.objects;
+create policy logos_admin_insert on storage.objects for insert to authenticated with check (bucket_id = 'logos' and public.is_admin());
+drop policy if exists logos_admin_update on storage.objects;
+create policy logos_admin_update on storage.objects for update to authenticated using (bucket_id = 'logos' and public.is_admin()) with check (bucket_id = 'logos' and public.is_admin());
+drop policy if exists logos_admin_delete on storage.objects;
+create policy logos_admin_delete on storage.objects for delete to authenticated using (bucket_id = 'logos' and public.is_admin());

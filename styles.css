@@ -267,3 +267,25 @@ label.f { display: flex; flex-direction: column; gap: 6px; font-size: 13px; colo
 .err { color: var(--bad); font-size: 13px; margin: 0; }
 
 .toast { position: fixed; z-index: 20; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 18px; border-radius: 10px; font-weight: 500; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
+
+/* Team identity */
+.tlogo { flex: none; width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: #fff; display: grid; place-items: center; overflow: hidden; font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.tlogo img { width: 100%; height: 100%; object-fit: contain; padding: 3px; }
+.tlogo.ph { background: var(--accent-soft); border-color: transparent; font-size: 17px; }
+.tlogo.lg { width: 56px; height: 56px; border-radius: 12px; font-size: 22px; }
+.tlogo.xl { width: clamp(52px, 8vw, 88px); height: clamp(52px, 8vw, 88px); border-radius: 16px; font-size: clamp(22px, 3.4vw, 36px); margin: 0 auto 6px; }
+.team-btn { flex-direction: row; align-items: center; gap: 10px; }
+.team-btn .tb-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sf-team { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.bname { display: flex; align-items: center; gap: 10px; }
+.bname .bn-text { min-width: 0; }
+.le-row.team { grid-template-columns: 64px 44px minmax(0, 1fr) 32px 32px; }
+.le-head.team { display: grid; grid-template-columns: 64px 44px minmax(0, 1fr) 64px; gap: 8px; margin-bottom: 6px; }
+.logo-btn { position: relative; border: 0; padding: 0; background: none; border-radius: 10px; }
+.logo-btn .tlogo { width: 44px; height: 44px; }
+.logo-btn:hover .tlogo { outline: 2px solid var(--accent); outline-offset: 1px; }
+.logo-plus { position: absolute; inset-inline-start: -4px; bottom: -4px; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 12px; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--panel); }
+.logo-btn.busy .tlogo { opacity: .4; }
+@media (prefers-reduced-motion: no-preference) { .logo-btn.busy .tlogo { animation: pulse 1s ease-in-out infinite; } }
+.slot .who .tlogo { opacity: 1; font-size: clamp(22px, 3.4vw, 36px); }
+.slot .who .tlogo.ph { background: color-mix(in srgb, var(--stage-fg) 14%, var(--stage)); color: var(--stage-fg); }
