@@ -289,3 +289,16 @@ label.f { display: flex; flex-direction: column; gap: 6px; font-size: 13px; colo
 @media (prefers-reduced-motion: no-preference) { .logo-btn.busy .tlogo { animation: pulse 1s ease-in-out infinite; } }
 .slot .who .tlogo { opacity: 1; font-size: clamp(22px, 3.4vw, 36px); }
 .slot .who .tlogo.ph { background: color-mix(in srgb, var(--stage-fg) 14%, var(--stage)); color: var(--stage-fg); }
+
+/* Add-team form */
+.add-team { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 12px; background: color-mix(in srgb, var(--accent-soft) 45%, var(--panel)); margin-bottom: 14px; }
+.add-team-grid { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+@media (max-width: 520px) { .add-team-grid { grid-template-columns: 90px minmax(0, 1fr); } .add-team-grid > :last-child { grid-column: 1 / -1; } }
+.add-team .f > span { font-size: 13px; color: var(--muted); }
+.upload-btn { gap: 8px; padding: 6px 12px; min-height: 40px; white-space: nowrap; }
+.upload-btn .tlogo { width: 28px; height: 28px; border-radius: 7px; }
+.upload-btn.busy { opacity: .7; }
+.bulk-add { margin-top: 14px; font-size: 14px; }
+.bulk-add summary { cursor: pointer; color: var(--muted); }
+.add-team .f { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+.add-team .upload-btn { color: var(--fg); align-self: flex-start; }

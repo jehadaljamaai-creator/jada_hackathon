@@ -668,7 +668,7 @@
       if (t.number == null) t.number = i + 1;
       const num = el('input', { type: 'number', id: 'teamno-' + t.id, min: '0', class: 'tnum', 'aria-label': 'رقم الفريق' }); num.value = t.number;
       num.addEventListener('input', () => { t.number = num.value === '' ? '' : Number(num.value); mark(); });
-      const inp = el('input', { type: 'text', id: 'team-' + t.id, 'aria-label': 'اسم المشروع ' + (i + 1), placeholder: 'اسم المشروع' }); inp.value = t.name;
+      const inp = el('input', { type: 'text', id: 'team-' + t.id, 'aria-label': 'اسم الفريق ' + (i + 1), placeholder: 'اسم الفريق' }); inp.value = t.name;
       inp.addEventListener('input', () => { t.name = inp.value; mark(); });
       const file = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/svg+xml', hidden: true, id: 'logo-' + t.id });
       const logoBtn = el('button', { class: 'logo-btn', type: 'button', title: t.logo ? 'تغيير الشعار' : 'إضافة شعار', 'aria-label': t.logo ? 'تغيير شعار ' + t.name : 'إضافة شعار ' + t.name, onclick: () => file.click() }, teamLogo(t), el('span', { class: 'logo-plus', text: t.logo ? '✎' : '+' }));
@@ -688,21 +688,67 @@
       });
       tl.append(el('div', { class: 'le-row team' }, num, logoBtn, file, inp,
         t.logo ? el('button', { class: 'icon-btn', type: 'button', title: 'إزالة الشعار', 'aria-label': 'إزالة الشعار', onclick: () => { t.logo = null; mark(); render(); } }, '⌫') : el('span'),
-        el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'حذف المشروع', onclick: () => { d.teams.splice(i, 1); mark(); render(); } }, '✕')));
+        el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'حذف الفريق', onclick: () => { d.teams.splice(i, 1); S.newTeam = null; mark(); render(); } }, '✕')));
     });
-    const bulk = el('textarea', { id: 'teamsBulk', rows: '3', placeholder: 'أضف عدة مشاريع دفعة واحدة: اسم في كل سطر' });
+    // Add-project form: team number, team name, logo
+    if (!S.newTeam || S.newTeam.for !== (d.id || 'new')) S.newTeam = { for: d.id || 'new', number: '', name: '', logo: null, busy: false };
+    const nt = S.newTeam;
+    if (nt.number === '' || nt.number == null) nt.number = nextNo();
+    const ntNum = el('input', { type: 'number', id: 'newTeamNo', min: '0', class: 'tnum', 'aria-label': 'رقم الفريق' }); ntNum.value = nt.number;
+    ntNum.addEventListener('input', () => { nt.number = ntNum.value === '' ? '' : Number(ntNum.value); });
+    const ntName = el('input', { type: 'text', id: 'newTeamName', placeholder: 'مثال: فريق أثر', 'aria-label': 'اسم الفريق' }); ntName.value = nt.name;
+    ntName.addEventListener('input', () => { nt.name = ntName.value; });
+    const ntFile = el('input', { type: 'file', id: 'newTeamLogo', accept: 'image/png,image/jpeg,image/webp,image/svg+xml', hidden: true });
+    const ntLogoBtn = el('button', { class: 'btn upload-btn' + (nt.busy ? ' busy' : ''), type: 'button', disabled: nt.busy, onclick: () => ntFile.click() },
+      nt.logo ? teamLogo({ logo: nt.logo, name: nt.name }) : null,
+      nt.busy ? 'جارٍ الرفع…' : nt.logo ? 'تغيير الشعار' : 'رفع الشعار');
+    ntFile.addEventListener('change', async () => {
+      const f = ntFile.files && ntFile.files[0]; if (!f) return;
+      nt.busy = true; render();
+      try {
+        const blob = await shrinkImage(f);
+        nt.logo = await API.uploadLogo((d.id || 'new') + '/new-' + Date.now() + '.' + (blob.type === 'image/webp' ? 'webp' : 'png'), blob);
+      } catch (err) {
+        const m = errCode(err);
+        toast(m === 'type' ? 'اختر صورة PNG أو JPG أو WebP أو SVG' : m === 'size' ? 'الصورة كبيرة جداً (الحد 8 ميجابايت)' : 'تعذّر رفع الشعار: ' + m);
+      }
+      nt.busy = false; render();
+      const n = document.getElementById('newTeamName'); if (n && !n.value) n.focus();
+    });
+    const addTeam = () => {
+      const name = (nt.name || '').trim();
+      if (!name) { toast('اكتب اسم الفريق'); ntName.focus(); return; }
+      if (nt.busy) { toast('انتظر حتى يكتمل رفع الشعار'); return; }
+      const number = nt.number === '' ? nextNo() : Number(nt.number);
+      if (d.teams.some((t, i) => Number(teamNo(t, i)) === number)) { toast('رقم الفريق ' + number + ' مستخدم لفريق آخر'); ntNum.focus(); return; }
+      d.teams.push({ id: 't' + Date.now().toString(36), name, number, logo: nt.logo || null });
+      S.newTeam = { for: d.id || 'new', number: '', name: '', logo: null, busy: false };
+      mark(); render();
+      const n = document.getElementById('newTeamName'); if (n) n.focus();
+    };
+    ntName.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); addTeam(); } });
+    const addBox = el('div', { class: 'add-team', id: 'addTeamBox' },
+      el('div', { class: 'add-team-grid' },
+        el('label', { class: 'f' }, 'رقم الفريق', ntNum),
+        el('label', { class: 'f' }, 'اسم الفريق', ntName),
+        el('div', { class: 'f' }, el('span', { text: 'الشعار' }), ntLogoBtn, ntFile)),
+      el('button', { class: 'btn primary', type: 'button', id: 'addTeamBtn', onclick: addTeam }, '+ إضافة الفريق'));
+
+    const bulk = el('textarea', { id: 'teamsBulk', rows: '3', placeholder: 'اسم في كل سطر' });
     right.append(el('div', { class: 'card' },
-      el('div', { class: 'sec-title' }, el('h2', { text: 'المشاريع المشاركة' }), el('span', { class: 'small muted tnum', text: d.teams.length + ' مشروعاً' })),
-      d.teams.length ? el('div', { class: 'le-head team small muted' }, el('span', { text: 'رقم الفريق' }), el('span', { text: 'الشعار' }), el('span', { text: 'اسم المشروع' })) : null,
+      el('div', { class: 'sec-title' }, el('h2', { text: 'الفرق المشاركة' }), el('span', { class: 'small muted tnum', text: d.teams.length + ' فريقاً' })),
+      addBox,
+      d.teams.length ? el('div', { class: 'le-head team small muted' }, el('span', { text: 'رقم الفريق' }), el('span', { text: 'الشعار' }), el('span', { text: 'اسم الفريق' })) : el('p', { class: 'small muted', style: 'margin:12px 0 0', text: 'لم تُضف فرق بعد. املأ الخانات أعلاه واضغط «إضافة الفريق».' }),
       tl,
-      el('div', { style: 'display:flex;flex-direction:column;gap:8px;margin-top:12px' }, bulk,
-        el('div', { class: 'row' }, el('button', { class: 'btn', type: 'button', onclick: () => {
-          const names = bulk.value.split('\n').map((x) => x.trim()).filter(Boolean);
-          let n = nextNo();
-          names.forEach((nm, k) => d.teams.push({ id: 't' + Date.now().toString(36) + k, name: nm, number: n++, logo: null }));
-          if (names.length) { mark(); render(); }
-        } }, 'إضافة المشاريع')),
-        el('p', { class: 'small muted', style: 'margin:0', text: 'اضغط على مربع الشعار لرفع صورة (تُصغَّر تلقائياً). الرقم يظهر للمحكّمين وفي النتائج. تعديل اسم مشروع أو رقمه لا يمس درجاته؛ حذفه يخفي درجاته من النتائج.' }))));
+      el('details', { class: 'bulk-add' }, el('summary', { text: 'إضافة عدة فرق دفعة واحدة (بالأسماء فقط)' }),
+        el('div', { style: 'display:flex;flex-direction:column;gap:8px;margin-top:10px' }, bulk,
+          el('div', { class: 'row' }, el('button', { class: 'btn', type: 'button', onclick: () => {
+            const names = bulk.value.split('\n').map((x) => x.trim()).filter(Boolean);
+            let n = nextNo();
+            names.forEach((nm, k) => d.teams.push({ id: 't' + Date.now().toString(36) + k, name: nm, number: n++, logo: null }));
+            if (names.length) { S.newTeam = null; mark(); render(); }
+          } }, 'إضافة الأسماء')))),
+      el('p', { class: 'small muted', style: 'margin:12px 0 0', text: 'يمكنك تعديل أي رقم أو اسم أو شعار في القائمة. تعديل الفريق لا يمس درجاته؛ حذفه يخفي درجاته من النتائج. لا تنس الضغط على حفظ.' })));
 
     // Judges
     const progress = new Map(((e && a.results[e.id] && a.results[e.id].judges) || []).map((j) => [j.name, j.count]));
